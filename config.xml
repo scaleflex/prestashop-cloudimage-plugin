@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<module>
+    <name>cloudimage</name>
+    <displayName><![CDATA[Cloudimage by Scaleflex]]></displayName>
+    <version><![CDATA[1.0.1]]></version>
+    <description><![CDATA[The easiest way to resize, compress, optimise and deliver lightning fast images to your users on any device via CDN.]]></description>
+    <author><![CDATA[Scaleflex]]></author>
+    <tab><![CDATA[front_office_features]]></tab>
+	<confirmUninstall><![CDATA[Are you sure you want to uninstall?]]></confirmUninstall>
+    <is_configurable>1</is_configurable>
+    <need_instance>0</need_instance>
+	<limited_countries></limited_countries>
+</module>
