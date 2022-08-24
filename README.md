@@ -2,8 +2,10 @@
 
 ## Download Cloudimage module
 
-- [Download Latest release of Module](https://github.com/scaleflex/prestashop-cloudimage-plugin/releases)
-- Unzip and copy the module to the /modules folder.
+- Step 1: Download latest version [Download Latest release of Module](https://github.com/scaleflex/prestashop-cloudimage-plugin/releases)
+- Step 2: Upzip the file and change the folder name to "cloudimage"
+- Step 3: Zip the file with the name "cloudimage.zip"
+- Step 4: In Admin to to Modules/Module Manager -> Upload the Zipped file
 
 ## Installation
 
@@ -14,13 +16,6 @@
 - Step 4: Update configuration and activate the Module, then your site is ready to go.
   ![](docs/img.png)
   
-### Manual install from Github
-
-- Step 1: Download latest version
-- Step 2: Upzip the file and change the folder name to "cloudimage"
-- Step 3: Zip the file with the name "cloudimage.zip"
-- Step 4: In Admin to to Modules/Module Manager -> Upload the Zipped file
-
 ## Configuration
 - Activation: Enable/Disable the module
 - Cloudimage API Key: Your Cloudimage Token
