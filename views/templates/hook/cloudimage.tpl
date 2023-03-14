@@ -20,7 +20,7 @@
         </script>
         <script src="https://cdn.scaleflex.it/filerobot/js-cloudimage-responsive/lazysizes.min.js"></script>
     {/if}
-    <script src="https://scaleflex.cloudimg.io/v7/plugins/js-cloudimage-responsive/4.8.12/plain/js-cloudimage-responsive.min.js?func=proxy"></script>
+    <script src="https://scaleflex.cloudimg.io/v7/plugins/js-cloudimage-responsive/4.9.1/plain/js-cloudimage-responsive.min.js?func=proxy"></script>
     <script>
         window.ciResponsive = new window.CIResponsive({
             {if $ciLazyLoading}
