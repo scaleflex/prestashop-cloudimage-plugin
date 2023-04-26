@@ -13,6 +13,22 @@
 $(document).ready(function () {
     const body = $('body');
 
+    $('.js-thumb').on('click', function (){
+        const imageSrc = $(this).data("image-large-src");
+        const coverImage = $('.js-qv-product-cover');
+        coverImage.removeClass('ci-image ci-image-loaded lazyloaded')
+        coverImage.attr('ci-src', imageSrc);
+        reloadCiImage();
+    })
+
+    $('.js-modal-thumb').on('click', function (){
+        const imageSrc = $(this).data("image-large-src");
+        const coverModalImage = $('.js-modal-product-cover');
+        coverModalImage.removeClass('ci-image ci-image-loaded lazyloaded')
+        coverModalImage.attr('ci-src', imageSrc);
+        reloadCiImage();
+    })
+
     // Reload After Ajax Call
     function reloadCiImage() {
         if (window.ciResponsive !== undefined) {
