@@ -41,7 +41,7 @@ class Cloudimage extends Module
         $this->author = 'Scaleflex';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
-            'min' => '1.7',
+            'min' => '1.6',
             'max' => _PS_VERSION_,
         ];
 
@@ -110,6 +110,28 @@ class Cloudimage extends Module
      */
     public function changeImageSrc($html, Smarty_Internal_Template $template)
     {
+        $attributes = [];
+        if (_PS_VERSION_ < '1.7' && !$this->context->employee && $this->getConfigs('ciActivation')) {
+            if (stripos($html, '<body') !== false) {
+                $pattern = '/<body([^>]*)>/i';
+
+                if (preg_match($pattern, $html, $matches)) {
+                    $bodyAttributes = $matches[1]; // Extract the attributes part
+                    $bodyAttributes = trim($bodyAttributes); // Remove any leading/trailing whitespaces
+
+                    // Parse the attributes into an associative array
+                    $attributes = [];
+                    if (!empty($bodyAttributes)) {
+                        preg_match_all('/(\w+)\s*=\s*("[^"]*")/', $bodyAttributes, $attributeMatches, PREG_SET_ORDER);
+                        foreach ($attributeMatches as $match) {
+                            $name = $match[1];
+                            $value = trim($match[2], '"');
+                            $attributes[$name] = $value;
+                        }
+                    }
+                }
+            }
+        }
 
         if (!$this->context->employee && $this->getConfigs('ciActivation')) {
             if (stripos($html, '<img') !== false) {
@@ -142,7 +164,6 @@ class Cloudimage extends Module
                         } else {
                             /** @var DOMElement $element */
                             $element->setAttribute('ci-src', $element->getAttribute('src') . $quality);
-                            $element->removeAttribute('src');
                             $replaceHtml = true;
                         }
                     }
@@ -151,6 +172,38 @@ class Cloudimage extends Module
                 if ($replaceHtml) {
                     $html = $dom->saveHTML($dom->documentElement);
                     $html = str_ireplace(['<html><body>', '</body></html>'], '', $html);
+
+                    if (!$this->getConfigs('ciPrerender')){
+                        $html = preg_replace('/<img([^>]*)\ssrc=[\'"]?([^\'"\s>]+)[\'"]?([^>]*)>/', '<img$1$3>', $html);
+                    }
+
+                    if (_PS_VERSION_ < '1.7') {
+
+                        if (stripos($html, '<body') !== false) {
+                            // Extract the body content
+                            $pattern = '/<body([^>]*)>(.*?)<\/body>/is';
+                            preg_match($pattern, $html, $matches);
+                            $bodyAttributes = '';
+                            if (array_key_exists('class', $attributes)) {
+                                $bodyAttributes .= ' class="' . $attributes['class'];
+                            }
+
+                            if (array_key_exists('id', $attributes)) {
+                                $bodyAttributes .= ' id="' . $attributes['id'];
+                            }
+
+                            if (array_key_exists('style', $attributes)) {
+                                $bodyAttributes .= ' style="' . $attributes['style'];
+                            }
+
+                            $bodyContent = $matches[2]; // Extracted body content
+                            // Create the new body tag with attributes and content
+                            $newBodyTag = '<body' . $bodyAttributes . '>' . $bodyContent . '</body>';
+
+                            // Replace the original body tag with the new body tag
+                            $html = preg_replace($pattern, $newBodyTag, $html);
+                        }
+                    }
                 }
             }
         }
