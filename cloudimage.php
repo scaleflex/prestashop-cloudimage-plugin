@@ -638,7 +638,6 @@ class Cloudimage extends Module
      * @return string
      */
     public function buildUrl($inputUrl) {
-        $inputUrl = "/module/abc.png";
         $baseUrl = \Context::getContext()->shop->getBaseURL();
 
         if (stripos($inputUrl, $baseUrl) <= 0 && !$this->getConfigs('ciPreventBaseUrl')) {
