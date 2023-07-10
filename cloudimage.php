@@ -231,7 +231,7 @@ class Cloudimage extends Module
             'ciToken' => (string)Configuration::get('CLOUDIMAGE_TOKEN'),
             'ciUseOriginalUrl' => (bool)Configuration::get('CLOUDIMAGE_USE_ORIGINAL_URL'),
             'ciPrerender' => (bool)Configuration::get('CLOUDIMAGE_PRERENDER'),
-            'ciPreventBaseUrl' => (bool)Configuration::get('CLOUDIMAGE_PREVENT_BASE_URL'),
+            'ciAutoBaseUrl' => (bool)Configuration::get('CLOUDIMAGE_AUTO_BASE_URL'),
             'ciLazyLoading' => (bool)Configuration::get('CLOUDIMAGE_LAZY_LOADING'),
             'ciIgnoreSvgImage' => (bool)Configuration::get('CLOUDIMAGE_IGNORE_SVG_IMAGE'),
             'ciOrgIfSml' => (bool)Configuration::get('CLOUDIMAGE_ORG_IF_SML'),
@@ -275,7 +275,7 @@ class Cloudimage extends Module
             Configuration::updateValue('CLOUDIMAGE_TOKEN', $ciToken);
             Configuration::updateValue('CLOUDIMAGE_USE_ORIGINAL_URL', Tools::getValue('CLOUDIMAGE_USE_ORIGINAL_URL'));
             Configuration::updateValue('CLOUDIMAGE_PRERENDER', Tools::getValue('CLOUDIMAGE_PRERENDER'));
-            Configuration::updateValue('CLOUDIMAGE_PREVENT_BASE_URL', Tools::getValue('CLOUDIMAGE_PREVENT_BASE_URL'));
+            Configuration::updateValue('CLOUDIMAGE_AUTO_BASE_URL', Tools::getValue('CLOUDIMAGE_AUTO_BASE_URL'));
             Configuration::updateValue('CLOUDIMAGE_LAZY_LOADING', Tools::getValue('CLOUDIMAGE_LAZY_LOADING'));
             Configuration::updateValue('CLOUDIMAGE_IGNORE_SVG_IMAGE', Tools::getValue('CLOUDIMAGE_IGNORE_SVG_IMAGE'));
             Configuration::updateValue('CLOUDIMAGE_ORG_IF_SML', Tools::getValue('CLOUDIMAGE_ORG_IF_SML'));
@@ -302,7 +302,7 @@ class Cloudimage extends Module
         $ciToken = (string)Configuration::get('CLOUDIMAGE_TOKEN');
         $ciUseOriginalUrl = (bool)Configuration::get('CLOUDIMAGE_USE_ORIGINAL_URL');
         $ciPrerender = (bool)Configuration::get('CLOUDIMAGE_PRERENDER');
-        $ciPreventBaseUrl = (bool)Configuration::get('CLOUDIMAGE_PREVENT_BASE_URL');
+        $ciAutoBaseUrl = (bool)Configuration::get('CLOUDIMAGE_AUTO_BASE_URL');
         $ciLazyLoading = (bool)Configuration::get('CLOUDIMAGE_LAZY_LOADING');
         $ciIgnoreSvgImage = (bool)Configuration::get('CLOUDIMAGE_IGNORE_SVG_IMAGE');
         $ciOrgIfSml = (bool)Configuration::get('CLOUDIMAGE_ORG_IF_SML');
@@ -390,9 +390,9 @@ class Cloudimage extends Module
                     ],
                     [
                         'type' => 'switch',
-                        'label' => $this->l('Already config base url in Cloudimage Admin'),
-                        'desc' => $this->l('If enabled, plugin will not auto add base url to some missing Base URL Image'),
-                        'name' => 'CLOUDIMAGE_PREVENT_BASE_URL',
+                        'label' => $this->l('Auto Base URL Image'),
+                        'desc' => $this->l('If enabled, Production with SSL only, The Plugin auto add base url to some missing Base URL Images'),
+                        'name' => 'CLOUDIMAGE_AUTO_BASE_URL',
                         'size' => 20,
                         'is_bool' => true,
                         'values' => [
@@ -569,7 +569,7 @@ class Cloudimage extends Module
         $helper->fields_value['CLOUDIMAGE_TOKEN'] = $ciToken;
         $helper->fields_value['CLOUDIMAGE_USE_ORIGINAL_URL'] = $ciUseOriginalUrl;
         $helper->fields_value['CLOUDIMAGE_PRERENDER'] = $ciPrerender;
-        $helper->fields_value['CLOUDIMAGE_PREVENT_BASE_URL'] = $ciPreventBaseUrl;
+        $helper->fields_value['CLOUDIMAGE_AUTO_BASE_URL'] = $ciAutoBaseUrl;
         $helper->fields_value['CLOUDIMAGE_LAZY_LOADING'] = $ciLazyLoading;
         $helper->fields_value['CLOUDIMAGE_IGNORE_SVG_IMAGE'] = $ciIgnoreSvgImage;
         $helper->fields_value['CLOUDIMAGE_ORG_IF_SML'] = $ciOrgIfSml;
@@ -600,7 +600,7 @@ class Cloudimage extends Module
             Configuration::updateValue('CLOUDIMAGE_TOKEN', "") &&
             Configuration::updateValue('CLOUDIMAGE_USE_ORIGINAL_URL', "1") &&
             Configuration::updateValue('CLOUDIMAGE_PRERENDER', "0") &&
-            Configuration::updateValue('CLOUDIMAGE_PREVENT_BASE_URL', "0") &&
+            Configuration::updateValue('CLOUDIMAGE_AUTO_BASE_URL', "0") &&
             Configuration::updateValue('CLOUDIMAGE_LAZY_LOADING', "1") &&
             Configuration::updateValue('CLOUDIMAGE_IGNORE_SVG_IMAGE', "0") &&
             Configuration::updateValue('CLOUDIMAGE_ORG_IF_SML', "1") &&
@@ -621,7 +621,7 @@ class Cloudimage extends Module
             Configuration::deleteByName('CLOUDIMAGE_TOKEN') &&
             Configuration::deleteByName('CLOUDIMAGE_USE_ORIGINAL_URL') &&
             Configuration::deleteByName('CLOUDIMAGE_PRERENDER') &&
-            Configuration::deleteByName('CLOUDIMAGE_PREVENT_BASE_URL') &&
+            Configuration::deleteByName('CLOUDIMAGE_AUTO_BASE_URL') &&
             Configuration::deleteByName('CLOUDIMAGE_LAZY_LOADING') &&
             Configuration::deleteByName('CLOUDIMAGE_IGNORE_SVG_IMAGE') &&
             Configuration::deleteByName('CLOUDIMAGE_ORG_IF_SML') &&
@@ -638,11 +638,13 @@ class Cloudimage extends Module
      * @return string
      */
     public function buildUrl($inputUrl) {
-        $baseUrl = \Context::getContext()->shop->getBaseURL();
+        $baseUrl = 'https://' .  $_SERVER['HTTP_HOST'];
 
-        if (stripos($inputUrl, $baseUrl) <= 0 && !$this->getConfigs('ciPreventBaseUrl')) {
+        if (stripos($inputUrl, "http") === false) {
             $inputUrl = $this->removeFirstSplash($inputUrl);
-            $inputUrl = $this->addSplashIfMissing($baseUrl) . $inputUrl;
+            if ($this->getConfigs('ciAutoBaseUrl')) {
+                $inputUrl = $this->addSplashIfMissing($baseUrl) . $inputUrl;
+            }
         } else {
             $inputUrl = $this->removeFirstSplash($inputUrl);
         }
@@ -668,11 +670,14 @@ class Cloudimage extends Module
         if ($config['ciOrgIfSml']) {
             $configParam = "org_if_sml=1";
             if (!strpos($ciUrl, $configParam)){
-                $ciUrl .= $flagCheck ? "&" . $configParam : $configParam;
+                if ($config['ciImageQuality'] === 100) {
+                    $ciUrl .=  "?" . $configParam;
+                } else {
+                    $ciUrl .= $flagCheck ? "&" . $configParam : $configParam;
+                }
             }
             $flagCheck = true;
         }
-
         return  $flagCheck ? $ciUrl : $this->removeLastQuestionMark($baseUrl . $inputUrl);
     }
 
