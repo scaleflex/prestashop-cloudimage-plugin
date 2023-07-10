@@ -36,7 +36,7 @@ class Cloudimage extends Module
     public function __construct()
     {
         $this->name = 'cloudimage';
-        $this->version = '1.0.1';
+        $this->version = '1.0.2';
         $this->tab = 'front_office_features';
         $this->author = 'Scaleflex';
         $this->need_instance = 0;
