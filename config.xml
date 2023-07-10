@@ -2,7 +2,7 @@
 <module>
     <name>cloudimage</name>
     <displayName><![CDATA[Cloudimage by Scaleflex]]></displayName>
-    <version><![CDATA[1.0.1]]></version>
+    <version><![CDATA[1.0.2]]></version>
     <description><![CDATA[The easiest way to resize, compress, optimise and deliver lightning fast images to your users on any device via CDN.]]></description>
     <author><![CDATA[Scaleflex]]></author>
     <tab><![CDATA[front_office_features]]></tab>
