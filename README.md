@@ -19,7 +19,9 @@
 ## Configuration
 - Activation: Enable/Disable the module
 - Cloudimage API Key: Your Cloudimage Token
-- Use origin URL: If enabled, the module will only add query parameters to the image source URL without prefixing it with `{token}.cloudimg.io`.
+- Prerender: If enabled, the plugin will disable JS Responsive and Change URL to {token}.cloudimg.io/{origin_url}
+- Auto Base URL Image: If enabled, Production with SSL only, The Plugin auto add base url to some missing Base URL Images
+- Use origin URL: If enabled, the plugin will only add query parameters to the image source URL, avoiding double CDNization in some cases, like if you have aliases configured.
 - Lazy Load: If enabled, only images close to the current viewpoint will be loaded.
 - Ignore SVG Size: If enabled, the module will ignore the image size node in the SVG file.
 - Prevent Image Resize: If you set Maximum "Pixel ratio" equal to 2, but some of your assets does not have min retina size(at least 2560x960), please enable this to prevent image resized. By default, yes.
