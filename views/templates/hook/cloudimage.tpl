@@ -31,6 +31,10 @@
             {else}
             doNotReplaceURL: false,
             {/if}
+            {if $ciCName neq '' }
+            customDomain: true,
+            domain: '{$ciCName}',
+            {/if}
             {if $ciMaximumPixelRatio eq 1}
             devicePixelRatioList: [1],
             {/if}

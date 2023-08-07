@@ -110,103 +110,94 @@ class Cloudimage extends Module
      */
     public function changeImageSrc($html, Smarty_Internal_Template $template)
     {
-        $attributes = [];
-        if (_PS_VERSION_ < '1.7' && !$this->context->employee && $this->getConfigs('ciActivation')) {
-            if (stripos($html, '<body') !== false) {
-                $pattern = '/<body([^>]*)>/i';
+        $replaceHtml = false;
 
-                if (preg_match($pattern, $html, $matches)) {
-                    $bodyAttributes = $matches[1]; // Extract the attributes part
-                    $bodyAttributes = trim($bodyAttributes); // Remove any leading/trailing whitespaces
+        $ciActivation = $this->getConfigs('ciActivation');
+        $ignoreSvg = $this->getConfigs('ciIgnoreSvgImage');
+        $ciPrerender = $this->getConfigs('ciPrerender');
+        $ciToken = $this->getConfigs('ciToken');
+        $ciImageQuality = $this->getConfigs('ciImageQuality');
 
-                    // Parse the attributes into an associative array
-                    $attributes = [];
-                    if (!empty($bodyAttributes)) {
-                        preg_match_all('/(\w+)\s*=\s*("[^"]*")/', $bodyAttributes, $attributeMatches, PREG_SET_ORDER);
-                        foreach ($attributeMatches as $match) {
-                            $name = $match[1];
-                            $value = trim($match[2], '"');
-                            $attributes[$name] = $value;
-                        }
-                    }
+        if (!$this->context->employee && $ciActivation) {
+            $dom = new DOMDocument();
+            $useErrors = libxml_use_internal_errors(true);
+            $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html);
+            libxml_use_internal_errors($useErrors);
+            $dom->preserveWhiteSpace = false;
+
+            $xpath = new DOMXPath($dom);
+
+            // Update <img> tags
+            $imgElements = $xpath->query('//img');
+            foreach ($imgElements as $element) {
+                $src = $element->getAttribute('src');
+                $extension = strtolower(pathinfo($src, PATHINFO_EXTENSION));
+                if ($ignoreSvg && $extension === 'svg') {
+                    continue;
                 }
-            }
-        }
 
-        if (!$this->context->employee && $this->getConfigs('ciActivation')) {
-            if (stripos($html, '<img') !== false) {
-                $dom = new domDocument();
-                $useErrors = libxml_use_internal_errors(true);
-                $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html);
-                libxml_use_internal_errors($useErrors);
-                $dom->preserveWhiteSpace = false;
-                $replaceHtml = false;
+                if ($ciPrerender) {
+                    if (stripos($src, $ciToken) === false) {
+                        $ciSrc = $this->buildUrl($src);
+                        $element->setAttribute('src', $ciSrc);
 
-                $quality = '';
-                if ($this->getConfigs('ciImageQuality') < 100) {
-                    $quality = '?q=' . $this->getConfigs('ciImageQuality');
-                }
-                $ignoreSvg = $this->getConfigs('ciIgnoreSvgImage');
-
-                foreach ($dom->getElementsByTagName('img') as $element) {
-                    if ($element->hasAttribute('src')) {
-                        if ($ignoreSvg && strtolower(pathinfo($element->getAttribute('src'), PATHINFO_EXTENSION)) === 'svg') {
-                            continue;
-                        }
-
-                        if ($this->getConfigs('ciPrerender')) {
-                            $imageSrc = $element->getAttribute('src') . $quality;
-                            if (!stripos($imageSrc, $this->getConfigs('ciToken'))) {
+                        $dataAttributes = ['data-image-medium-src', 'data-image-large-src', 'data-full-size-image-url'];
+                        foreach ($dataAttributes as $attribute) {
+                            if ($element->hasAttribute($attribute)) {
+                                $imageSrc = $element->getAttribute($attribute);
                                 $ciSrc = $this->buildUrl($imageSrc);
-                                $element->setAttribute('src', $ciSrc);
-                                $replaceHtml = true;
+                                $element->setAttribute($attribute, $ciSrc);
                             }
-                        } else {
-                            /** @var DOMElement $element */
-                            $element->setAttribute('ci-src', $element->getAttribute('src') . $quality);
-                            $replaceHtml = true;
                         }
                     }
+                } else {
+                    $quality = $ciImageQuality < 100 ? '?q=' . $ciImageQuality : '';
+                    $element->setAttribute('ci-src', $src . $quality);
+                    $element->removeAttribute('src');
+                }
+                $replaceHtml = true;
+            }
+
+            // Update <source> tags
+            $sourceElements = $xpath->query('//source');
+            foreach ($sourceElements as $element) {
+                $srcset = $element->getAttribute('srcset');
+                $extension = strtolower(pathinfo($srcset, PATHINFO_EXTENSION));
+                if ($ignoreSvg && $extension === 'svg') {
+                    continue;
                 }
 
-                if ($replaceHtml) {
-                    $html = $dom->saveHTML($dom->documentElement);
-                    $html = str_ireplace(['<html><body>', '</body></html>'], '', $html);
+                if ($ciPrerender && stripos($srcset, $ciToken) === false) {
+                    $ciSrc = $this->buildUrl($srcset);
+                    $element->setAttribute('srcset', $ciSrc);
+                    $replaceHtml = true;
+                }
+            }
 
-                    if (!$this->getConfigs('ciPrerender')){
-                        $html = preg_replace('/<img([^>]*)\ssrc=[\'"]?([^\'"\s>]+)[\'"]?([^>]*)>/', '<img$1$3>', $html);
-                    }
+            if ($replaceHtml) {
+                $html = $dom->saveHTML($dom->documentElement);
+                $html = str_ireplace(['<html><body>', '</body></html>'], '', $html);
 
-                    if (_PS_VERSION_ < '1.7') {
+                if (!$ciPrerender) {
+                    $html = preg_replace('/<img([^>]*)\ssrc=[\'"]?([^\'"\s>]+)[\'"]?([^>]*)>/', '<img$1$3>', $html);
+                }
 
-                        if (stripos($html, '<body') !== false) {
-                            // Extract the body content
-                            $pattern = '/<body([^>]*)>(.*?)<\/body>/is';
-                            preg_match($pattern, $html, $matches);
-                            $bodyAttributes = '';
-                            if (array_key_exists('class', $attributes)) {
-                                $bodyAttributes .= ' class="' . $attributes['class'];
-                            }
+                if (_PS_VERSION_ < '1.7') {
+                    if (stripos($html, '<body') !== false) {
+                        $pattern = '/<body([^>]*)>(.*?)<\/body>/is';
+                        preg_match($pattern, $html, $matches);
+                        $bodyAttributes = $matches[1];
+                        $bodyContent = $matches[2];
 
-                            if (array_key_exists('id', $attributes)) {
-                                $bodyAttributes .= ' id="' . $attributes['id'];
-                            }
-
-                            if (array_key_exists('style', $attributes)) {
-                                $bodyAttributes .= ' style="' . $attributes['style'];
-                            }
-
-                            $bodyContent = $matches[2]; // Extracted body content
-                            // Create the new body tag with attributes and content
-                            $newBodyTag = '<body' . $bodyAttributes . '>' . $bodyContent . '</body>';
-
-                            // Replace the original body tag with the new body tag
-                            $html = preg_replace($pattern, $newBodyTag, $html);
-                        }
+                        $newBodyTag = '<body' . $bodyAttributes . '>' . $bodyContent . '</body>';
+                        $fragment = $dom->createDocumentFragment();
+                        $fragment->appendXML($newBodyTag);
+                        $html = $dom->saveHTML($fragment);
                     }
                 }
             }
         }
+
         return $html;
     }
 
@@ -229,6 +220,7 @@ class Cloudimage extends Module
         $configs = [
             'ciActivation' => (bool)Configuration::get('CLOUDIMAGE_ACTIVATION'),
             'ciToken' => (string)Configuration::get('CLOUDIMAGE_TOKEN'),
+            'ciCName' => (string)Configuration::get('CLOUDIMAGE_CNAME'),
             'ciUseOriginalUrl' => (bool)Configuration::get('CLOUDIMAGE_USE_ORIGINAL_URL'),
             'ciPrerender' => (bool)Configuration::get('CLOUDIMAGE_PRERENDER'),
             'ciAutoBaseUrl' => (bool)Configuration::get('CLOUDIMAGE_AUTO_BASE_URL'),
@@ -273,6 +265,7 @@ class Cloudimage extends Module
             }
 
             Configuration::updateValue('CLOUDIMAGE_TOKEN', $ciToken);
+            Configuration::updateValue('CLOUDIMAGE_CNAME', Tools::getValue('CLOUDIMAGE_CNAME'));
             Configuration::updateValue('CLOUDIMAGE_USE_ORIGINAL_URL', Tools::getValue('CLOUDIMAGE_USE_ORIGINAL_URL'));
             Configuration::updateValue('CLOUDIMAGE_PRERENDER', Tools::getValue('CLOUDIMAGE_PRERENDER'));
             Configuration::updateValue('CLOUDIMAGE_AUTO_BASE_URL', Tools::getValue('CLOUDIMAGE_AUTO_BASE_URL'));
@@ -300,6 +293,7 @@ class Cloudimage extends Module
     {
         $ciActivation = (bool)Configuration::get('CLOUDIMAGE_ACTIVATION');
         $ciToken = (string)Configuration::get('CLOUDIMAGE_TOKEN');
+        $ciCName = (string)Configuration::get('CLOUDIMAGE_CNAME');
         $ciUseOriginalUrl = (bool)Configuration::get('CLOUDIMAGE_USE_ORIGINAL_URL');
         $ciPrerender = (bool)Configuration::get('CLOUDIMAGE_PRERENDER');
         $ciAutoBaseUrl = (bool)Configuration::get('CLOUDIMAGE_AUTO_BASE_URL');
@@ -366,6 +360,13 @@ class Cloudimage extends Module
                         'label' => $this->l('Token'),
                         'desc' => $this->l('Cloudimage token'),
                         'name' => 'CLOUDIMAGE_TOKEN',
+                        'size' => 20
+                    ],
+                    [
+                        'type' => 'text',
+                        'label' => $this->l('CNAME'),
+                        'desc' => $this->l('CNAME'),
+                        'name' => 'CLOUDIMAGE_CNAME',
                         'size' => 20
                     ],
                     [
@@ -567,6 +568,7 @@ class Cloudimage extends Module
         // Load current value into the form
         $helper->fields_value['CLOUDIMAGE_ACTIVATION'] = $ciActivation;
         $helper->fields_value['CLOUDIMAGE_TOKEN'] = $ciToken;
+        $helper->fields_value['CLOUDIMAGE_CNAME'] = $ciCName;
         $helper->fields_value['CLOUDIMAGE_USE_ORIGINAL_URL'] = $ciUseOriginalUrl;
         $helper->fields_value['CLOUDIMAGE_PRERENDER'] = $ciPrerender;
         $helper->fields_value['CLOUDIMAGE_AUTO_BASE_URL'] = $ciAutoBaseUrl;
@@ -598,6 +600,7 @@ class Cloudimage extends Module
     {
         return Configuration::updateValue('CLOUDIMAGE_ACTIVATION', "0") &&
             Configuration::updateValue('CLOUDIMAGE_TOKEN', "") &&
+            Configuration::updateValue('CLOUDIMAGE_CNAME', "") &&
             Configuration::updateValue('CLOUDIMAGE_USE_ORIGINAL_URL', "1") &&
             Configuration::updateValue('CLOUDIMAGE_PRERENDER', "0") &&
             Configuration::updateValue('CLOUDIMAGE_AUTO_BASE_URL', "0") &&
@@ -619,6 +622,7 @@ class Cloudimage extends Module
     {
         return Configuration::deleteByName('CLOUDIMAGE_ACTIVATION') &&
             Configuration::deleteByName('CLOUDIMAGE_TOKEN') &&
+            Configuration::deleteByName('CLOUDIMAGE_CNAME') &&
             Configuration::deleteByName('CLOUDIMAGE_USE_ORIGINAL_URL') &&
             Configuration::deleteByName('CLOUDIMAGE_PRERENDER') &&
             Configuration::deleteByName('CLOUDIMAGE_AUTO_BASE_URL') &&
@@ -650,14 +654,32 @@ class Cloudimage extends Module
         }
 
         $config = $this->getConfigs();
-        $baseUrl = "//" . $config['ciToken'] . ".cloudimg.io/";
+
+        $signedUrl = "//" . $config['ciToken'] . ".cloudimg.io/";
+
+        if (!empty($config['ciCName'])){
+            $signedUrl = $this->addSplashIfMissing("//" .$config['ciCName']);
+        }
 
         if (!$config['ciRemoveV7']) {
-            $baseUrl .= "v7/";
+            $signedUrl .= "v7/";
         }
 
         $flagCheck = false;
-        $ciUrl = $baseUrl . $inputUrl . "?";
+
+        if (!empty($config['ciCName'])) {
+            $inputUrl = str_replace('/' . $config['ciCName'], '', $inputUrl);
+        }
+
+        $ciUrl = $signedUrl . $inputUrl . "?";
+
+        if (!empty($config['ciCName'])) {
+            $ciUrl = str_replace($config['ciCName'] . '//', $config['ciCName'] . '/', $ciUrl);
+        }
+
+        if (!$config['ciRemoveV7']) {
+            $ciUrl = str_replace('//v7', '', $ciUrl);
+        }
 
         if ($config['ciImageQuality'] < 100) {
             if (!strpos($ciUrl, "?q=" . $config['ciImageQuality'])) {
