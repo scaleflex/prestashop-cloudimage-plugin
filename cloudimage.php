@@ -102,6 +102,20 @@ class Cloudimage extends Module
         $this->context->smarty->registerFilter(Smarty::FILTER_OUTPUT, [$this, 'changeImageSrc']);
     }
 
+    public function checkExtensionIsImage($extension) {
+        $imageExtensions = [
+            'jpg', 'jpeg', 'png', 'gif', 'bmp',
+            'tiff', 'webp', 'svg', 'ico', 'jfif',
+            'pjpeg', 'pjp', 'avif', 'apng'
+        ];
+
+        if (in_array($extension, $imageExtensions)) {
+            return true;
+        }
+
+        return false;
+    }
+
     /**
      * Override smarty template
      * @param $html
@@ -119,6 +133,20 @@ class Cloudimage extends Module
         $ciImageQuality = $this->getConfigs('ciImageQuality');
 
         if (!$this->context->employee && $ciActivation) {
+
+            $bodyAttributes = "";
+            if (_PS_VERSION_ < '1.7' && !$this->context->employee && $this->getConfigs('ciActivation')) {
+                if (stripos($html, '<body') !== false) {
+                    $pattern = '/<body([^>]*)>/i';
+
+                    if (preg_match($pattern, $html, $matches)) {
+                        $bodyAttributes = $matches[1]; // Extract the attributes part
+                        $bodyAttributes = trim($bodyAttributes); // Remove any leading/trailing whitespaces
+                    }
+                }
+            }
+
+
             $dom = new DOMDocument();
             $useErrors = libxml_use_internal_errors(true);
             $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html);
@@ -131,6 +159,7 @@ class Cloudimage extends Module
             $imgElements = $xpath->query('//img');
             foreach ($imgElements as $element) {
                 $src = $element->getAttribute('src');
+
                 $extension = strtolower(pathinfo($src, PATHINFO_EXTENSION));
                 if ($ignoreSvg && $extension === 'svg') {
                     continue;
@@ -155,6 +184,31 @@ class Cloudimage extends Module
                     $element->setAttribute('ci-src', $src . $quality);
                     $element->removeAttribute('src');
                 }
+
+                $replaceHtml = true;
+            }
+
+            // Update a tag // Only for Prerender
+            $anchorTags = $xpath->query('//a');
+            foreach ($anchorTags as $element) {
+
+                $src = $element->getAttribute('href');
+
+                $extension = strtolower(pathinfo($src, PATHINFO_EXTENSION));
+
+                if ($this->checkExtensionIsImage($extension)) {
+                    if ($ignoreSvg && $extension === 'svg') {
+                        continue;
+                    }
+
+                    if ($ciPrerender) {
+                        if (stripos($src, $ciToken) === false) {
+                            $ciSrc = $this->buildUrl($src);
+                            $element->setAttribute('href', $ciSrc);
+                        }
+                    }
+                }
+
                 $replaceHtml = true;
             }
 
@@ -183,21 +237,19 @@ class Cloudimage extends Module
                 }
 
                 if (_PS_VERSION_ < '1.7') {
+
                     if (stripos($html, '<body') !== false) {
+                        // Extract the body content
                         $pattern = '/<body([^>]*)>(.*?)<\/body>/is';
                         preg_match($pattern, $html, $matches);
-                        $bodyAttributes = $matches[1];
-                        $bodyContent = $matches[2];
-
-                        $newBodyTag = '<body' . $bodyAttributes . '>' . $bodyContent . '</body>';
-                        $fragment = $dom->createDocumentFragment();
-                        $fragment->appendXML($newBodyTag);
-                        $html = $dom->saveHTML($fragment);
+                        $bodyContent = $matches[2]; // Extracted body content
+                        $newBodyTag = '<body ' . $bodyAttributes . '>' . $bodyContent . '</body>';
+                        // Replace the original body tag with the new body tag
+                        $html = preg_replace($pattern, $newBodyTag, $html);
                     }
                 }
             }
         }
-
         return $html;
     }
 
@@ -652,6 +704,7 @@ class Cloudimage extends Module
         } else {
             $inputUrl = $this->removeFirstSplash($inputUrl);
         }
+
 
         $config = $this->getConfigs();
 
