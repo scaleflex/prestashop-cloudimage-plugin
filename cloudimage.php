@@ -102,6 +102,20 @@ class Cloudimage extends Module
         $this->context->smarty->registerFilter(Smarty::FILTER_OUTPUT, [$this, 'changeImageSrc']);
     }
 
+    public function checkExtensionIsImage($extension) {
+        $imageExtensions = [
+            'jpg', 'jpeg', 'png', 'gif', 'bmp',
+            'tiff', 'webp', 'svg', 'ico', 'jfif',
+            'pjpeg', 'pjp', 'avif', 'apng'
+        ];
+
+        if (in_array($extension, $imageExtensions)) {
+            return true;
+        }
+
+        return false;
+    }
+
     /**
      * Override smarty template
      * @param $html
@@ -169,6 +183,30 @@ class Cloudimage extends Module
                     $quality = $ciImageQuality < 100 ? '?q=' . $ciImageQuality : '';
                     $element->setAttribute('ci-src', $src . $quality);
                     $element->removeAttribute('src');
+                }
+
+                $replaceHtml = true;
+            }
+
+            // Update a tag // Only for Prerender
+            $anchorTags = $xpath->query('//a');
+            foreach ($anchorTags as $element) {
+
+                $src = $element->getAttribute('href');
+
+                $extension = strtolower(pathinfo($src, PATHINFO_EXTENSION));
+
+                if ($this->checkExtensionIsImage($extension)) {
+                    if ($ignoreSvg && $extension === 'svg') {
+                        continue;
+                    }
+
+                    if ($ciPrerender) {
+                        if (stripos($src, $ciToken) === false) {
+                            $ciSrc = $this->buildUrl($src);
+                            $element->setAttribute('href', $ciSrc);
+                        }
+                    }
                 }
 
                 $replaceHtml = true;
