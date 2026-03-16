@@ -6,9 +6,10 @@
  * With the purchase or the installation of the software in your application
  * you accept the licence agreement.
  * You must not modify, adapt or create derivative works of this source code
- *  @author    Scaleflex
- *  @copyright Since 2022 Scaleflex
- *  @license   LICENSE.txt
+ *
+ * @author    Scaleflex
+ * @copyright Since 2022 Scaleflex
+ * @license   LICENSE.txt
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -17,52 +18,41 @@ if (!defined('_PS_VERSION_')) {
 
 class Cloudimage extends Module
 {
-    /**
-     * Override trans function to make it compatible with 1.6 bellow
-     * @param $id
-     * @param array $parameters
-     * @param $domain
-     * @param $locale
-     * @return string
-     */
-    public function trans($id, array $parameters = [], $domain = null, $locale = null) {
-        if (_PS_VERSION_ > '1.7') {
-            return parent::trans($id,$parameters, $domain, $locale);
-        } else {
-            return parent::l($id, false, $locale);
-        }
-    }
-
     public function __construct()
     {
         $this->name = 'cloudimage';
-        $this->version = '1.0.2';
+        $this->version = '2.0.0';
         $this->tab = 'front_office_features';
         $this->author = 'Scaleflex';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
-            'min' => '1.6',
+            'min' => '9.0.0',
             'max' => _PS_VERSION_,
         ];
-
-        if (_PS_VERSION_ > '1.7') {
-            $this->bootstrap = true;
-        }
-
-        $this->displayName = $this->l('Cloudimage by Scaleflex');
-        $this->description = $this->l('The easiest way to resize, compress, optimise and deliver lightning fast images to your users on any device via CDN.');
-
-        $this->confirmUninstall = $this->l('Are you sure you want to uninstall?');
+        $this->bootstrap = true;
 
         parent::__construct();
+
+        $this->displayName = $this->trans('Cloudimage by Scaleflex', [], 'Modules.Cloudimage.Admin');
+        $this->description = $this->trans(
+            'The easiest way to resize, compress, optimise and deliver lightning fast images to your users on any device via CDN.',
+            [],
+            'Modules.Cloudimage.Admin'
+        );
+        $this->confirmUninstall = $this->trans('Are you sure you want to uninstall?', [], 'Modules.Cloudimage.Admin');
     }
 
     /**
      * Install the Module
+     *
      * @return bool
      */
     public function install()
     {
+        if (Shop::isFeatureActive()) {
+            Shop::setContext(Shop::CONTEXT_ALL);
+        }
+
         return parent::install() &&
             $this->initConfigs() &&
             $this->registerHook('displayHeader') &&
@@ -71,7 +61,8 @@ class Cloudimage extends Module
     }
 
     /**
-     * Uninstall the application
+     * Uninstall the Module
+     *
      * @return bool
      */
     public function uninstall()
@@ -81,6 +72,7 @@ class Cloudimage extends Module
 
     /**
      * Add JS to Front Page
+     *
      * @return void
      */
     public function hookActionFrontControllerSetMedia()
@@ -93,34 +85,41 @@ class Cloudimage extends Module
 
     /**
      * Override smarty template Hook
-     * @param $params
+     *
+     * @param array $params
+     *
      * @return void
-     * @throws SmartyException
      */
     public function hookActionDispatcher($params)
     {
-        $this->context->smarty->registerFilter(Smarty::FILTER_OUTPUT, [$this, 'changeImageSrc']);
-    }
-
-    public function checkExtensionIsImage($extension) {
-        $imageExtensions = [
-            'jpg', 'jpeg', 'png', 'gif', 'bmp',
-            'tiff', 'webp', 'svg', 'ico', 'jfif',
-            'pjpeg', 'pjp', 'avif', 'apng'
-        ];
-
-        if (in_array($extension, $imageExtensions)) {
-            return true;
-        }
-
-        return false;
+        $this->context->smarty->registerFilter('output', [$this, 'changeImageSrc']);
     }
 
     /**
-     * Override smarty template
-     * @param $html
+     * Check if file extension is an image
+     *
+     * @param string $extension
+     *
+     * @return bool
+     */
+    public function checkExtensionIsImage($extension)
+    {
+        $imageExtensions = [
+            'jpg', 'jpeg', 'png', 'gif', 'bmp',
+            'tiff', 'webp', 'svg', 'ico', 'jfif',
+            'pjpeg', 'pjp', 'avif', 'apng',
+        ];
+
+        return in_array($extension, $imageExtensions);
+    }
+
+    /**
+     * Override smarty template output to rewrite image URLs
+     *
+     * @param string $html
      * @param Smarty_Internal_Template $template
-     * @return array|mixed|string|string[]
+     *
+     * @return string
      */
     public function changeImageSrc($html, Smarty_Internal_Template $template)
     {
@@ -133,20 +132,6 @@ class Cloudimage extends Module
         $ciImageQuality = $this->getConfigs('ciImageQuality');
 
         if (!$this->context->employee && $ciActivation) {
-
-            $bodyAttributes = "";
-            if (_PS_VERSION_ < '1.7' && !$this->context->employee && $this->getConfigs('ciActivation')) {
-                if (stripos($html, '<body') !== false) {
-                    $pattern = '/<body([^>]*)>/i';
-
-                    if (preg_match($pattern, $html, $matches)) {
-                        $bodyAttributes = $matches[1]; // Extract the attributes part
-                        $bodyAttributes = trim($bodyAttributes); // Remove any leading/trailing whitespaces
-                    }
-                }
-            }
-
-
             $dom = new DOMDocument();
             $useErrors = libxml_use_internal_errors(true);
             $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html);
@@ -157,8 +142,23 @@ class Cloudimage extends Module
 
             // Update <img> tags
             $imgElements = $xpath->query('//img');
+            $dataAttributes = ['data-image-medium-src', 'data-image-large-src', 'data-full-size-image-url'];
             foreach ($imgElements as $element) {
                 $src = $element->getAttribute('src');
+
+                if ($src == '') {
+                    foreach ($dataAttributes as $attribute) {
+                        if ($element->hasAttribute($attribute)) {
+                            $src = $element->getAttribute($attribute);
+                            break;
+                        }
+                    }
+                }
+
+                // Skip filerobot.com URLs
+                if (stripos($src, 'filerobot.com') !== false) {
+                    continue;
+                }
 
                 $extension = strtolower(pathinfo($src, PATHINFO_EXTENSION));
                 if ($ignoreSvg && $extension === 'svg') {
@@ -166,11 +166,10 @@ class Cloudimage extends Module
                 }
 
                 if ($ciPrerender) {
-                    if (stripos($src, $ciToken) === false) {
+                    if (stripos($src, $ciToken) === false && $src != '') {
                         $ciSrc = $this->buildUrl($src);
                         $element->setAttribute('src', $ciSrc);
 
-                        $dataAttributes = ['data-image-medium-src', 'data-image-large-src', 'data-full-size-image-url'];
                         foreach ($dataAttributes as $attribute) {
                             if ($element->hasAttribute($attribute)) {
                                 $imageSrc = $element->getAttribute($attribute);
@@ -180,19 +179,25 @@ class Cloudimage extends Module
                         }
                     }
                 } else {
-                    $quality = $ciImageQuality < 100 ? '?q=' . $ciImageQuality : '';
-                    $element->setAttribute('ci-src', $src . $quality);
-                    $element->removeAttribute('src');
+                    if ($src != '') {
+                        $quality = $ciImageQuality < 100 ? '?q=' . $ciImageQuality : '';
+                        $element->setAttribute('ci-src', $src . $quality);
+                        $element->removeAttribute('src');
+                    }
                 }
 
                 $replaceHtml = true;
             }
 
-            // Update a tag // Only for Prerender
+            // Update <a> tags — Only for Prerender
             $anchorTags = $xpath->query('//a');
             foreach ($anchorTags as $element) {
-
                 $src = $element->getAttribute('href');
+
+                // Skip filerobot.com URLs
+                if (stripos($src, 'filerobot.com') !== false) {
+                    continue;
+                }
 
                 $extension = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 
@@ -216,6 +221,12 @@ class Cloudimage extends Module
             $sourceElements = $xpath->query('//source');
             foreach ($sourceElements as $element) {
                 $srcset = $element->getAttribute('srcset');
+
+                // Skip filerobot.com URLs
+                if (stripos($srcset, 'filerobot.com') !== false) {
+                    continue;
+                }
+
                 $extension = strtolower(pathinfo($srcset, PATHINFO_EXTENSION));
                 if ($ignoreSvg && $extension === 'svg') {
                     continue;
@@ -233,58 +244,54 @@ class Cloudimage extends Module
                 $html = str_ireplace(['<html><body>', '</body></html>'], '', $html);
 
                 if (!$ciPrerender) {
-                    $html = preg_replace('/<img([^>]*)\ssrc=[\'"]?([^\'"\s>]+)[\'"]?([^>]*)>/', '<img$1$3>', $html);
-                }
-
-                if (_PS_VERSION_ < '1.7') {
-
-                    if (stripos($html, '<body') !== false) {
-                        // Extract the body content
-                        $pattern = '/<body([^>]*)>(.*?)<\/body>/is';
-                        preg_match($pattern, $html, $matches);
-                        $bodyContent = $matches[2]; // Extracted body content
-                        $newBodyTag = '<body ' . $bodyAttributes . '>' . $bodyContent . '</body>';
-                        // Replace the original body tag with the new body tag
-                        $html = preg_replace($pattern, $newBodyTag, $html);
-                    }
+                    $html = preg_replace('/<img([^>]*)\ssrc=[\'"]?([^\'"\\s>]+)[\'"]?([^>]*)>/', '<img$1$3>', $html);
                 }
             }
         }
+
         return $html;
     }
 
     /**
-     * Add to Header
-     * @param $params
-     * @return false|string
+     * Add scripts to Header via displayHeader hook
+     *
+     * @param array $params
+     *
+     * @return string|void
      */
     public function hookDisplayHeader($params)
     {
         if (!$this->getConfigs('ciPrerender') && $this->getConfigs('ciActivation')) {
             $this->context->smarty->assign($this->getConfigs());
+
             return $this->display(__FILE__, 'views/templates/hook/cloudimage.tpl');
         }
     }
 
-    /** Get Configuration */
+    /**
+     * Get Configuration values
+     *
+     * @param string|null $configName
+     *
+     * @return mixed
+     */
     public function getConfigs($configName = null)
     {
         $configs = [
-            'ciActivation' => (bool)Configuration::get('CLOUDIMAGE_ACTIVATION'),
-            'ciToken' => (string)Configuration::get('CLOUDIMAGE_TOKEN'),
-            'ciCName' => (string)Configuration::get('CLOUDIMAGE_CNAME'),
-            'ciUseOriginalUrl' => (bool)Configuration::get('CLOUDIMAGE_USE_ORIGINAL_URL'),
-            'ciPrerender' => (bool)Configuration::get('CLOUDIMAGE_PRERENDER'),
-            'ciAutoBaseUrl' => (bool)Configuration::get('CLOUDIMAGE_AUTO_BASE_URL'),
-            'ciLazyLoading' => (bool)Configuration::get('CLOUDIMAGE_LAZY_LOADING'),
-            'ciIgnoreSvgImage' => (bool)Configuration::get('CLOUDIMAGE_IGNORE_SVG_IMAGE'),
-            'ciOrgIfSml' => (bool)Configuration::get('CLOUDIMAGE_ORG_IF_SML'),
-            'ciImageQuality' => (int)Configuration::get('CLOUDIMAGE_IMAGE_QUALITY'),
-            'ciMaximumPixelRatio' => (int)Configuration::get('CLOUDIMAGE_MAXIMUM_PIXEL_RATIO'),
-            'ciCustomJSFunction' => (string)Configuration::get('CLOUDIMAGE_CUSTOM_JS_FUNCTION'),
-            'ciCustomLibraryOption' => (string)Configuration::get('CLOUDIMAGE_CUSTOM_LIBRARY_OPTION'),
-            'ciRemoveV7' => (string)Configuration::get('CLOUDIMAGE_REMOVE_V7'),
-
+            'ciActivation' => (bool) Configuration::get('CLOUDIMAGE_ACTIVATION'),
+            'ciToken' => (string) Configuration::get('CLOUDIMAGE_TOKEN'),
+            'ciCName' => (string) Configuration::get('CLOUDIMAGE_CNAME'),
+            'ciUseOriginalUrl' => (bool) Configuration::get('CLOUDIMAGE_USE_ORIGINAL_URL'),
+            'ciPrerender' => (bool) Configuration::get('CLOUDIMAGE_PRERENDER'),
+            'ciAutoBaseUrl' => (bool) Configuration::get('CLOUDIMAGE_AUTO_BASE_URL'),
+            'ciLazyLoading' => (bool) Configuration::get('CLOUDIMAGE_LAZY_LOADING'),
+            'ciIgnoreSvgImage' => (bool) Configuration::get('CLOUDIMAGE_IGNORE_SVG_IMAGE'),
+            'ciOrgIfSml' => (bool) Configuration::get('CLOUDIMAGE_ORG_IF_SML'),
+            'ciImageQuality' => (int) Configuration::get('CLOUDIMAGE_IMAGE_QUALITY'),
+            'ciMaximumPixelRatio' => (int) Configuration::get('CLOUDIMAGE_MAXIMUM_PIXEL_RATIO'),
+            'ciCustomJSFunction' => (string) Configuration::get('CLOUDIMAGE_CUSTOM_JS_FUNCTION'),
+            'ciCustomLibraryOption' => (string) Configuration::get('CLOUDIMAGE_CUSTOM_LIBRARY_OPTION'),
+            'ciRemoveV7' => (bool) Configuration::get('CLOUDIMAGE_REMOVE_V7'),
         ];
 
         if ($configName) {
@@ -294,16 +301,16 @@ class Cloudimage extends Module
         return $configs;
     }
 
-
     /**
      * Admin Config Page
+     *
      * @return string
      */
     public function getContent()
     {
         $output = '';
 
-        if (Tools::isSubmit('submit' . $this->name)) {
+        if (Tools::isSubmit('submitcloudimage')) {
             $submitStatus = true;
             $ciToken = Tools::getValue('CLOUDIMAGE_TOKEN');
 
@@ -330,314 +337,248 @@ class Cloudimage extends Module
             Configuration::updateValue('CLOUDIMAGE_CUSTOM_LIBRARY_OPTION', Tools::getValue('CLOUDIMAGE_CUSTOM_LIBRARY_OPTION'));
             Configuration::updateValue('CLOUDIMAGE_REMOVE_V7', Tools::getValue('CLOUDIMAGE_REMOVE_V7'));
 
-            $output .= $submitStatus ? $this->displayConfirmation($this->trans('Form submitted successfully')) :
-                $this->displayError($this->trans('You can not active Cloudimage because your Token is empty'));
+            $output .= $submitStatus
+                ? $this->displayConfirmation($this->trans('Form submitted successfully', [], 'Modules.Cloudimage.Admin'))
+                : $this->displayError($this->trans('You can not activate Cloudimage because your Token is empty', [], 'Modules.Cloudimage.Admin'));
         }
 
-        return $output . $this->buildForm();
+        return $output . $this->renderForm();
     }
 
     /**
-     * Build Admin Form
+     * Render the admin configuration form
+     *
      * @return string
      */
-    public function buildForm()
+    protected function renderForm()
     {
-        $ciActivation = (bool)Configuration::get('CLOUDIMAGE_ACTIVATION');
-        $ciToken = (string)Configuration::get('CLOUDIMAGE_TOKEN');
-        $ciCName = (string)Configuration::get('CLOUDIMAGE_CNAME');
-        $ciUseOriginalUrl = (bool)Configuration::get('CLOUDIMAGE_USE_ORIGINAL_URL');
-        $ciPrerender = (bool)Configuration::get('CLOUDIMAGE_PRERENDER');
-        $ciAutoBaseUrl = (bool)Configuration::get('CLOUDIMAGE_AUTO_BASE_URL');
-        $ciLazyLoading = (bool)Configuration::get('CLOUDIMAGE_LAZY_LOADING');
-        $ciIgnoreSvgImage = (bool)Configuration::get('CLOUDIMAGE_IGNORE_SVG_IMAGE');
-        $ciOrgIfSml = (bool)Configuration::get('CLOUDIMAGE_ORG_IF_SML');
-        $ciImageQuality = (int)Configuration::get('CLOUDIMAGE_IMAGE_QUALITY');
-        $ciMaximumPixelRatio = (int)Configuration::get('CLOUDIMAGE_MAXIMUM_PIXEL_RATIO');
-        $ciCustomJSFunction = (string)Configuration::get('CLOUDIMAGE_CUSTOM_JS_FUNCTION');
-        $ciCustomLibraryOption = (string)Configuration::get('CLOUDIMAGE_CUSTOM_LIBRARY_OPTION');
-        $ciRemoveV7 = (bool)Configuration::get('CLOUDIMAGE_REMOVE_V7');
+        $helper = new HelperForm();
 
-        $qualityOptions = [];
-        $pixelRatios = [
-            [
-                'id_option' => 1,
-                'name' => (string)1
-            ],
-            [
-                'id_option' => 1.5,
-                'name' => (string)1.5
-            ],
-            [
-                'id_option' => 2,
-                'name' => (string)2
-            ]
+        $helper->show_toolbar = false;
+        $helper->table = $this->table;
+        $helper->module = $this;
+        $helper->default_form_language = $this->context->language->id;
+        $helper->allow_employee_form_lang = Configuration::get('PS_BO_ALLOW_EMPLOYEE_FORM_LANG', 0);
+
+        $helper->identifier = $this->identifier;
+        $helper->submit_action = 'submitcloudimage';
+        $helper->currentIndex = $this->context->link->getAdminLink('AdminModules', false)
+            . '&configure=' . $this->name . '&tab_module=' . $this->tab . '&module_name=' . $this->name;
+        $helper->token = Tools::getAdminTokenLite('AdminModules');
+
+        $helper->tpl_vars = [
+            'fields_value' => $this->getConfigFormValues(),
+            'languages' => $this->context->controller->getLanguages(),
+            'id_language' => $this->context->language->id,
         ];
 
+        return $helper->generateForm([$this->getConfigForm()]);
+    }
+
+    /**
+     * Get the configuration form definition
+     *
+     * @return array
+     */
+    protected function getConfigForm()
+    {
+        $qualityOptions = [];
         for ($i = 1; $i <= 100; $i++) {
             $qualityOptions[] = [
                 'id_option' => $i,
-                'name' => (string)$i
+                'name' => (string) $i,
             ];
         }
 
-        $form = [
+        $pixelRatios = [
+            ['id_option' => 1, 'name' => '1'],
+            ['id_option' => 1.5, 'name' => '1.5'],
+            ['id_option' => 2, 'name' => '2'],
+        ];
+
+        return [
             'form' => [
                 'legend' => [
-                    'title' => $this->l('Cloudimage Integration'),
+                    'title' => $this->trans('Cloudimage Integration', [], 'Modules.Cloudimage.Admin'),
+                    'icon' => 'icon-cogs',
                 ],
                 'input' => [
                     [
                         'type' => 'switch',
-                        'label' => $this->l('Activation'),
-                        'desc' => $this->l('Enable/Disable the Module'),
+                        'label' => $this->trans('Activation', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('Enable/Disable the Module', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_ACTIVATION',
-                        'size' => 20,
                         'is_bool' => true,
                         'values' => [
-                            [
-                                'id' => 'active_on',
-                                'value' => 1,
-                                'label' => $this->trans('Enabled', array(), 'Admin.Global')
-                            ],
-                            [
-                                'id' => 'active_off',
-                                'value' => 0,
-                                'label' => $this->trans('Disabled', array(), 'Admin.Global')
-                            ]
+                            ['id' => 'active_on', 'value' => true, 'label' => $this->trans('Enabled', [], 'Admin.Global')],
+                            ['id' => 'active_off', 'value' => false, 'label' => $this->trans('Disabled', [], 'Admin.Global')],
                         ],
                     ],
                     [
+                        'col' => 3,
                         'type' => 'text',
-                        'label' => $this->l('Token'),
-                        'desc' => $this->l('Cloudimage token'),
+                        'label' => $this->trans('Token', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('Cloudimage token', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_TOKEN',
-                        'size' => 20
                     ],
                     [
+                        'col' => 3,
                         'type' => 'text',
-                        'label' => $this->l('CNAME'),
-                        'desc' => $this->l('CNAME'),
+                        'label' => $this->trans('CNAME', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('CNAME', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_CNAME',
-                        'size' => 20
                     ],
                     [
                         'type' => 'switch',
-                        'label' => $this->l('Use Original URL'),
-                        'desc' => $this->l('If enabled, the plugin will only add query parameters to the image source URL, avoiding double CDNization in some cases, like if you have aliases configured.'),
+                        'label' => $this->trans('Use Original URL', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('If enabled, the plugin will only add query parameters to the image source URL, avoiding double CDNization in some cases, like if you have aliases configured.', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_USE_ORIGINAL_URL',
-                        'size' => 20,
                         'is_bool' => true,
                         'values' => [
-                            [
-                                'id' => 'active_on',
-                                'value' => 1,
-                                'label' => $this->trans('Enabled', array(), 'Admin.Global')
-                            ],
-                            [
-                                'id' => 'active_off',
-                                'value' => 0,
-                                'label' => $this->trans('Disabled', array(), 'Admin.Global')
-                            ]
+                            ['id' => 'use_original_url_on', 'value' => true, 'label' => $this->trans('Enabled', [], 'Admin.Global')],
+                            ['id' => 'use_original_url_off', 'value' => false, 'label' => $this->trans('Disabled', [], 'Admin.Global')],
                         ],
                     ],
                     [
                         'type' => 'switch',
-                        'label' => $this->l('Auto Base URL Image'),
-                        'desc' => $this->l('If enabled, Production with SSL only, The Plugin auto add base url to some missing Base URL Images'),
+                        'label' => $this->trans('Auto Base URL Image', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('If enabled, Production with SSL only, the plugin auto adds base URL to some missing Base URL images.', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_AUTO_BASE_URL',
-                        'size' => 20,
                         'is_bool' => true,
                         'values' => [
-                            [
-                                'id' => 'active_on',
-                                'value' => 1,
-                                'label' => $this->trans('Enabled', array(), 'Admin.Global')
-                            ],
-                            [
-                                'id' => 'active_off',
-                                'value' => 0,
-                                'label' => $this->trans('Disabled', array(), 'Admin.Global')
-                            ]
+                            ['id' => 'auto_base_url_on', 'value' => true, 'label' => $this->trans('Enabled', [], 'Admin.Global')],
+                            ['id' => 'auto_base_url_off', 'value' => false, 'label' => $this->trans('Disabled', [], 'Admin.Global')],
                         ],
                     ],
                     [
                         'type' => 'switch',
-                        'label' => $this->l('Prerender'),
-                        'desc' => $this->l('If enabled, the plugin will disable JS Responsive and Change URL to {token}.cloudimg.io/{origin_url}'),
+                        'label' => $this->trans('Prerender', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('If enabled, the plugin will disable JS Responsive and change URL to {token}.cloudimg.io/{origin_url}', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_PRERENDER',
-                        'size' => 20,
                         'is_bool' => true,
                         'values' => [
-                            [
-                                'id' => 'active_on',
-                                'value' => 1,
-                                'label' => $this->trans('Enabled', array(), 'Admin.Global')
-                            ],
-                            [
-                                'id' => 'active_off',
-                                'value' => 0,
-                                'label' => $this->trans('Disabled', array(), 'Admin.Global')
-                            ]
+                            ['id' => 'prerender_on', 'value' => true, 'label' => $this->trans('Enabled', [], 'Admin.Global')],
+                            ['id' => 'prerender_off', 'value' => false, 'label' => $this->trans('Disabled', [], 'Admin.Global')],
                         ],
                     ],
                     [
                         'type' => 'switch',
-                        'label' => $this->l('Lazy Loading'),
-                        'desc' => $this->l('If enabled, only images close to the current viewpoint will be loaded.'),
+                        'label' => $this->trans('Lazy Loading', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('If enabled, only images close to the current viewpoint will be loaded.', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_LAZY_LOADING',
-                        'size' => 20,
                         'is_bool' => true,
                         'values' => [
-                            [
-                                'id' => 'active_on',
-                                'value' => 1,
-                                'label' => $this->trans('Enabled', array(), 'Admin.Global')
-                            ],
-                            [
-                                'id' => 'active_off',
-                                'value' => 0,
-                                'label' => $this->trans('Disabled', array(), 'Admin.Global')
-                            ]
+                            ['id' => 'lazy_loading_on', 'value' => true, 'label' => $this->trans('Enabled', [], 'Admin.Global')],
+                            ['id' => 'lazy_loading_off', 'value' => false, 'label' => $this->trans('Disabled', [], 'Admin.Global')],
                         ],
                     ],
                     [
                         'type' => 'switch',
-                        'label' => $this->l('Ignore SVG Image'),
-                        'desc' => $this->l('By default, No.'),
+                        'label' => $this->trans('Ignore SVG Image', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('By default, No.', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_IGNORE_SVG_IMAGE',
-                        'size' => 20,
                         'is_bool' => true,
                         'values' => [
-                            [
-                                'id' => 'active_on',
-                                'value' => 1,
-                                'label' => $this->trans('Enabled', array(), 'Admin.Global')
-                            ],
-                            [
-                                'id' => 'active_off',
-                                'value' => 0,
-                                'label' => $this->trans('Disabled', array(), 'Admin.Global')
-                            ]
+                            ['id' => 'ignore_svg_on', 'value' => true, 'label' => $this->trans('Enabled', [], 'Admin.Global')],
+                            ['id' => 'ignore_svg_off', 'value' => false, 'label' => $this->trans('Disabled', [], 'Admin.Global')],
                         ],
                     ],
                     [
                         'type' => 'switch',
-                        'label' => $this->l('Prevent Image Resize'),
-                        'desc' => $this->l('If you set Maximum "Pixel ratio" equal to 2, but some of your assets does not have min retina size(at least 2560x960), please enable this to prevent image resized. By default, yes.'),
+                        'label' => $this->trans('Prevent Image Resize', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('If you set Maximum "Pixel ratio" equal to 2, but some of your assets does not have min retina size (at least 2560x960), please enable this to prevent image resized. By default, yes.', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_ORG_IF_SML',
-                        'size' => 20,
                         'is_bool' => true,
                         'values' => [
-                            [
-                                'id' => 'active_on',
-                                'value' => 1,
-                                'label' => $this->trans('Enabled', array(), 'Admin.Global')
-                            ],
-                            [
-                                'id' => 'active_off',
-                                'value' => 0,
-                                'label' => $this->trans('Disabled', array(), 'Admin.Global')
-                            ]
+                            ['id' => 'org_if_sml_on', 'value' => true, 'label' => $this->trans('Enabled', [], 'Admin.Global')],
+                            ['id' => 'org_if_sml_off', 'value' => false, 'label' => $this->trans('Disabled', [], 'Admin.Global')],
                         ],
                     ],
                     [
                         'type' => 'select',
-                        'label' => $this->l('Image Quality'),
-                        'desc' => $this->l('The smaller the value, the more your image will be compressed. Careful — the quality of the image will decrease as well. By default, 90.'),
+                        'label' => $this->trans('Image Quality', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('The smaller the value, the more your image will be compressed. Careful — the quality of the image will decrease as well. By default, 90.', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_IMAGE_QUALITY',
                         'required' => false,
                         'options' => [
                             'query' => $qualityOptions,
                             'id' => 'id_option',
-                            'name' => 'name'
+                            'name' => 'name',
                         ],
                     ],
                     [
                         'type' => 'select',
-                        'label' => $this->l('Maximum " Pixel ratio"'),
-                        'desc' => $this->l('List of supported device pixel ratios, eg 2 for Retina devices'),
+                        'label' => $this->trans('Maximum "Pixel ratio"', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('List of supported device pixel ratios, eg 2 for Retina devices.', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_MAXIMUM_PIXEL_RATIO',
                         'required' => false,
                         'options' => [
                             'query' => $pixelRatios,
                             'id' => 'id_option',
-                            'name' => 'name'
+                            'name' => 'name',
                         ],
                     ],
                     [
                         'type' => 'switch',
-                        'label' => $this->l('Remove V7'),
-                        'desc' => $this->l('Removes the "/v7" part in URL format. Activate for token created after October 20th 2021.'),
+                        'label' => $this->trans('Remove V7', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('Removes the "/v7" part in URL format. Activate for token created after October 20th 2021.', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_REMOVE_V7',
-                        'size' => 20,
                         'is_bool' => true,
                         'values' => [
-                            [
-                                'id' => 'active_on',
-                                'value' => 1,
-                                'label' => $this->trans('Enabled', array(), 'Admin.Global')
-                            ],
-                            [
-                                'id' => 'active_off',
-                                'value' => 0,
-                                'label' => $this->trans('Disabled', array(), 'Admin.Global')
-                            ]
+                            ['id' => 'remove_v7_on', 'value' => true, 'label' => $this->trans('Enabled', [], 'Admin.Global')],
+                            ['id' => 'remove_v7_off', 'value' => false, 'label' => $this->trans('Disabled', [], 'Admin.Global')],
                         ],
                     ],
                     [
                         'type' => 'textarea',
-                        'label' => $this->l('Custom js function'),
-                        'desc' => $this->l('The valid js function starting with { and finishing with }'),
+                        'label' => $this->trans('Custom JS Function', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('The valid JS function starting with { and finishing with }', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_CUSTOM_JS_FUNCTION',
-                        'size' => 20
                     ],
                     [
+                        'col' => 6,
                         'type' => 'text',
-                        'label' => $this->l('Custom Library Options'),
-                        'desc' => $this->l('Modifies the library URL and must begin with the symbol &. Please read document before use.'),
+                        'label' => $this->trans('Custom Library Options', [], 'Modules.Cloudimage.Admin'),
+                        'desc' => $this->trans('Modifies the library URL and must begin with the symbol &. Please read documentation before use.', [], 'Modules.Cloudimage.Admin'),
                         'name' => 'CLOUDIMAGE_CUSTOM_LIBRARY_OPTION',
-                        'size' => 20
-                    ]
+                    ],
                 ],
                 'submit' => [
-                    'title' => $this->l('Save'),
-                    'class' => 'btn btn-default pull-right',
+                    'title' => $this->trans('Save', [], 'Admin.Actions'),
                 ],
             ],
         ];
+    }
 
-        $helper = new HelperForm();
-        $helper->table = $this->table;
-        $helper->name_controller = $this->name;
-        $helper->token = Tools::getAdminTokenLite('AdminModules');
-        $helper->currentIndex = AdminController::$currentIndex . '&' . http_build_query(['configure' => $this->name]);
-        $helper->submit_action = 'submit' . $this->name;
-
-        // Default language
-        $helper->default_form_language = (int)Configuration::get('PS_LANG_DEFAULT');
-
-        // Load current value into the form
-        $helper->fields_value['CLOUDIMAGE_ACTIVATION'] = $ciActivation;
-        $helper->fields_value['CLOUDIMAGE_TOKEN'] = $ciToken;
-        $helper->fields_value['CLOUDIMAGE_CNAME'] = $ciCName;
-        $helper->fields_value['CLOUDIMAGE_USE_ORIGINAL_URL'] = $ciUseOriginalUrl;
-        $helper->fields_value['CLOUDIMAGE_PRERENDER'] = $ciPrerender;
-        $helper->fields_value['CLOUDIMAGE_AUTO_BASE_URL'] = $ciAutoBaseUrl;
-        $helper->fields_value['CLOUDIMAGE_LAZY_LOADING'] = $ciLazyLoading;
-        $helper->fields_value['CLOUDIMAGE_IGNORE_SVG_IMAGE'] = $ciIgnoreSvgImage;
-        $helper->fields_value['CLOUDIMAGE_ORG_IF_SML'] = $ciOrgIfSml;
-        $helper->fields_value['CLOUDIMAGE_IMAGE_QUALITY'] = $ciImageQuality;
-        $helper->fields_value['CLOUDIMAGE_MAXIMUM_PIXEL_RATIO'] = $ciMaximumPixelRatio;
-        $helper->fields_value['CLOUDIMAGE_CUSTOM_JS_FUNCTION'] = $ciCustomJSFunction;
-        $helper->fields_value['CLOUDIMAGE_CUSTOM_LIBRARY_OPTION'] = $ciCustomLibraryOption;
-        $helper->fields_value['CLOUDIMAGE_REMOVE_V7'] = $ciRemoveV7;
-
-        return $helper->generateForm([$form]);
+    /**
+     * Get form values from configuration
+     *
+     * @return array
+     */
+    protected function getConfigFormValues()
+    {
+        return [
+            'CLOUDIMAGE_ACTIVATION' => Configuration::get('CLOUDIMAGE_ACTIVATION'),
+            'CLOUDIMAGE_TOKEN' => Configuration::get('CLOUDIMAGE_TOKEN'),
+            'CLOUDIMAGE_CNAME' => Configuration::get('CLOUDIMAGE_CNAME'),
+            'CLOUDIMAGE_USE_ORIGINAL_URL' => Configuration::get('CLOUDIMAGE_USE_ORIGINAL_URL'),
+            'CLOUDIMAGE_PRERENDER' => Configuration::get('CLOUDIMAGE_PRERENDER'),
+            'CLOUDIMAGE_AUTO_BASE_URL' => Configuration::get('CLOUDIMAGE_AUTO_BASE_URL'),
+            'CLOUDIMAGE_LAZY_LOADING' => Configuration::get('CLOUDIMAGE_LAZY_LOADING'),
+            'CLOUDIMAGE_IGNORE_SVG_IMAGE' => Configuration::get('CLOUDIMAGE_IGNORE_SVG_IMAGE'),
+            'CLOUDIMAGE_ORG_IF_SML' => Configuration::get('CLOUDIMAGE_ORG_IF_SML'),
+            'CLOUDIMAGE_IMAGE_QUALITY' => Configuration::get('CLOUDIMAGE_IMAGE_QUALITY'),
+            'CLOUDIMAGE_MAXIMUM_PIXEL_RATIO' => Configuration::get('CLOUDIMAGE_MAXIMUM_PIXEL_RATIO'),
+            'CLOUDIMAGE_CUSTOM_JS_FUNCTION' => Configuration::get('CLOUDIMAGE_CUSTOM_JS_FUNCTION'),
+            'CLOUDIMAGE_CUSTOM_LIBRARY_OPTION' => Configuration::get('CLOUDIMAGE_CUSTOM_LIBRARY_OPTION'),
+            'CLOUDIMAGE_REMOVE_V7' => Configuration::get('CLOUDIMAGE_REMOVE_V7'),
+        ];
     }
 
     /**
      * Using new translation system
+     *
+     * @return bool
      */
     public function isUsingNewTranslationSystem()
     {
@@ -645,77 +586,81 @@ class Cloudimage extends Module
     }
 
     /**
-     * Init configs if install
+     * Init configs on install
+     *
      * @return bool
      */
     private function initConfigs()
     {
-        return Configuration::updateValue('CLOUDIMAGE_ACTIVATION', "0") &&
-            Configuration::updateValue('CLOUDIMAGE_TOKEN', "") &&
-            Configuration::updateValue('CLOUDIMAGE_CNAME', "") &&
-            Configuration::updateValue('CLOUDIMAGE_USE_ORIGINAL_URL', "1") &&
-            Configuration::updateValue('CLOUDIMAGE_PRERENDER', "0") &&
-            Configuration::updateValue('CLOUDIMAGE_AUTO_BASE_URL', "0") &&
-            Configuration::updateValue('CLOUDIMAGE_LAZY_LOADING', "1") &&
-            Configuration::updateValue('CLOUDIMAGE_IGNORE_SVG_IMAGE', "0") &&
-            Configuration::updateValue('CLOUDIMAGE_ORG_IF_SML', "1") &&
-            Configuration::updateValue('CLOUDIMAGE_IMAGE_QUALITY', "90") &&
-            Configuration::updateValue('CLOUDIMAGE_MAXIMUM_PIXEL_RATIO', "2") &&
-            Configuration::updateValue('CLOUDIMAGE_CUSTOM_JS_FUNCTION', "") &&
-            Configuration::updateValue('CLOUDIMAGE_CUSTOM_LIBRARY_OPTION', "") &&
-            Configuration::updateValue('CLOUDIMAGE_REMOVE_V7', "1");
+        return Configuration::updateValue('CLOUDIMAGE_ACTIVATION', '0')
+            && Configuration::updateValue('CLOUDIMAGE_TOKEN', '')
+            && Configuration::updateValue('CLOUDIMAGE_CNAME', '')
+            && Configuration::updateValue('CLOUDIMAGE_USE_ORIGINAL_URL', '1')
+            && Configuration::updateValue('CLOUDIMAGE_PRERENDER', '0')
+            && Configuration::updateValue('CLOUDIMAGE_AUTO_BASE_URL', '0')
+            && Configuration::updateValue('CLOUDIMAGE_LAZY_LOADING', '1')
+            && Configuration::updateValue('CLOUDIMAGE_IGNORE_SVG_IMAGE', '0')
+            && Configuration::updateValue('CLOUDIMAGE_ORG_IF_SML', '1')
+            && Configuration::updateValue('CLOUDIMAGE_IMAGE_QUALITY', '90')
+            && Configuration::updateValue('CLOUDIMAGE_MAXIMUM_PIXEL_RATIO', '2')
+            && Configuration::updateValue('CLOUDIMAGE_CUSTOM_JS_FUNCTION', '')
+            && Configuration::updateValue('CLOUDIMAGE_CUSTOM_LIBRARY_OPTION', '')
+            && Configuration::updateValue('CLOUDIMAGE_REMOVE_V7', '1');
     }
 
     /**
-     * Delete config if uninstalled
+     * Delete configs on uninstall
+     *
      * @return bool
      */
     private function deleteConfigs()
     {
-        return Configuration::deleteByName('CLOUDIMAGE_ACTIVATION') &&
-            Configuration::deleteByName('CLOUDIMAGE_TOKEN') &&
-            Configuration::deleteByName('CLOUDIMAGE_CNAME') &&
-            Configuration::deleteByName('CLOUDIMAGE_USE_ORIGINAL_URL') &&
-            Configuration::deleteByName('CLOUDIMAGE_PRERENDER') &&
-            Configuration::deleteByName('CLOUDIMAGE_AUTO_BASE_URL') &&
-            Configuration::deleteByName('CLOUDIMAGE_LAZY_LOADING') &&
-            Configuration::deleteByName('CLOUDIMAGE_IGNORE_SVG_IMAGE') &&
-            Configuration::deleteByName('CLOUDIMAGE_ORG_IF_SML') &&
-            Configuration::deleteByName('CLOUDIMAGE_IMAGE_QUALITY') &&
-            Configuration::deleteByName('CLOUDIMAGE_MAXIMUM_PIXEL_RATIO') &&
-            Configuration::deleteByName('CLOUDIMAGE_CUSTOM_JS_FUNCTION') &&
-            Configuration::deleteByName('CLOUDIMAGE_CUSTOM_LIBRARY_OPTION') &&
-            Configuration::deleteByName('CLOUDIMAGE_REMOVE_V7');
+        return Configuration::deleteByName('CLOUDIMAGE_ACTIVATION')
+            && Configuration::deleteByName('CLOUDIMAGE_TOKEN')
+            && Configuration::deleteByName('CLOUDIMAGE_CNAME')
+            && Configuration::deleteByName('CLOUDIMAGE_USE_ORIGINAL_URL')
+            && Configuration::deleteByName('CLOUDIMAGE_PRERENDER')
+            && Configuration::deleteByName('CLOUDIMAGE_AUTO_BASE_URL')
+            && Configuration::deleteByName('CLOUDIMAGE_LAZY_LOADING')
+            && Configuration::deleteByName('CLOUDIMAGE_IGNORE_SVG_IMAGE')
+            && Configuration::deleteByName('CLOUDIMAGE_ORG_IF_SML')
+            && Configuration::deleteByName('CLOUDIMAGE_IMAGE_QUALITY')
+            && Configuration::deleteByName('CLOUDIMAGE_MAXIMUM_PIXEL_RATIO')
+            && Configuration::deleteByName('CLOUDIMAGE_CUSTOM_JS_FUNCTION')
+            && Configuration::deleteByName('CLOUDIMAGE_CUSTOM_LIBRARY_OPTION')
+            && Configuration::deleteByName('CLOUDIMAGE_REMOVE_V7');
     }
 
     /**
-     * Build URL
+     * Build Cloudimage URL
+     *
+     * @param string $inputUrl
      *
      * @return string
      */
-    public function buildUrl($inputUrl) {
-        $baseUrl = 'https://' .  $_SERVER['HTTP_HOST'];
+    public function buildUrl($inputUrl)
+    {
+        $baseUrl = 'https://' . $_SERVER['HTTP_HOST'];
 
-        if (stripos($inputUrl, "http") === false) {
-            $inputUrl = $this->removeFirstSplash($inputUrl);
+        if (stripos($inputUrl, 'http') === false) {
+            $inputUrl = $this->removeFirstSlash($inputUrl);
             if ($this->getConfigs('ciAutoBaseUrl')) {
-                $inputUrl = $this->addSplashIfMissing($baseUrl) . $inputUrl;
+                $inputUrl = $this->addSlashIfMissing($baseUrl) . $inputUrl;
             }
         } else {
-            $inputUrl = $this->removeFirstSplash($inputUrl);
+            $inputUrl = $this->removeFirstSlash($inputUrl);
         }
-
 
         $config = $this->getConfigs();
 
-        $signedUrl = "//" . $config['ciToken'] . ".cloudimg.io/";
+        $signedUrl = '//' . $config['ciToken'] . '.cloudimg.io/';
 
-        if (!empty($config['ciCName'])){
-            $signedUrl = $this->addSplashIfMissing("//" .$config['ciCName']);
+        if (!empty($config['ciCName'])) {
+            $signedUrl = $this->addSlashIfMissing('//' . $config['ciCName']);
         }
 
         if (!$config['ciRemoveV7']) {
-            $signedUrl .= "v7/";
+            $signedUrl .= 'v7/';
         }
 
         $flagCheck = false;
@@ -724,7 +669,7 @@ class Cloudimage extends Module
             $inputUrl = str_replace('/' . $config['ciCName'], '', $inputUrl);
         }
 
-        $ciUrl = $signedUrl . $inputUrl . "?";
+        $ciUrl = $signedUrl . $inputUrl . '?';
 
         if (!empty($config['ciCName'])) {
             $ciUrl = str_replace($config['ciCName'] . '//', $config['ciCName'] . '/', $ciUrl);
@@ -735,46 +680,73 @@ class Cloudimage extends Module
         }
 
         if ($config['ciImageQuality'] < 100) {
-            if (!strpos($ciUrl, "?q=" . $config['ciImageQuality'])) {
-                $ciUrl .= "q=" . $config['ciImageQuality'];
+            if (!strpos($ciUrl, '?q=' . $config['ciImageQuality'])) {
+                $ciUrl .= 'q=' . $config['ciImageQuality'];
             }
             $flagCheck = true;
         }
         $ciUrl = $this->removeLastQuestionMark($ciUrl);
 
         if ($config['ciOrgIfSml']) {
-            $configParam = "org_if_sml=1";
-            if (!strpos($ciUrl, $configParam)){
+            $configParam = 'org_if_sml=1';
+            if (!strpos($ciUrl, $configParam)) {
                 if ($config['ciImageQuality'] === 100) {
-                    $ciUrl .=  "?" . $configParam;
+                    $ciUrl .= '?' . $configParam;
                 } else {
-                    $ciUrl .= $flagCheck ? "&" . $configParam : $configParam;
+                    $ciUrl .= $flagCheck ? '&' . $configParam : $configParam;
                 }
             }
             $flagCheck = true;
         }
-        return  $flagCheck ? $ciUrl : $this->removeLastQuestionMark($baseUrl . $inputUrl);
+
+        return $flagCheck ? $ciUrl : $this->removeLastQuestionMark($baseUrl . $inputUrl);
     }
 
-    // Private support URL
-    private function removeLastQuestionMark($ciUrl) {
+    /**
+     * Remove trailing question mark from URL
+     *
+     * @param string $ciUrl
+     *
+     * @return string
+     */
+    private function removeLastQuestionMark($ciUrl)
+    {
         if (substr($ciUrl, -1) === '?') {
             $ciUrl = substr($ciUrl, 0, -1);
         }
+
         return $ciUrl;
     }
 
-    private function removeFirstSplash($inputUrl) {
-        if (substr($inputUrl, 0, 1) === "/") {
+    /**
+     * Remove leading slash from URL
+     *
+     * @param string $inputUrl
+     *
+     * @return string
+     */
+    private function removeFirstSlash($inputUrl)
+    {
+        if (substr($inputUrl, 0, 1) === '/') {
             $inputUrl = substr($inputUrl, 1);
         }
+
         return $inputUrl;
     }
 
-    private function addSplashIfMissing($baseUrl) {
-        if (substr($baseUrl, -1) !== "/") {
+    /**
+     * Add trailing slash if missing
+     *
+     * @param string $baseUrl
+     *
+     * @return string
+     */
+    private function addSlashIfMissing($baseUrl)
+    {
+        if (substr($baseUrl, -1) !== '/') {
             $baseUrl .= '/';
         }
+
         return $baseUrl;
     }
 }

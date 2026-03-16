@@ -5,7 +5,7 @@
  *
  * This file is licenced under the Software License Agreement.
  * With the purchase or the installation of the software in your application
- * If you accept the licence agreement.
+ * you accept the licence agreement.
  *
  * @author    Scaleflex
  * @copyright Since 2022 Scaleflex
@@ -13,6 +13,7 @@
  *}
 
 {if $ciActivation}
+    <link rel="stylesheet" href="https://cdn.scaleflex.it/plugins/js-cloudimage-responsive/latest/js-cloudimage-responsive.min.css?func=proxy" />
     {if $ciLazyLoading}
         <script>
             window.lazySizesConfig = window.lazySizesConfig || {};
@@ -20,18 +21,18 @@
         </script>
         <script src="https://cdn.scaleflex.it/filerobot/js-cloudimage-responsive/lazysizes.min.js"></script>
     {/if}
-    <script src="https://scaleflex.cloudimg.io/v7/plugins/js-cloudimage-responsive/4.9.1/plain/js-cloudimage-responsive.min.js?func=proxy"></script>
+    <script src="https://cdn.scaleflex.it/plugins/js-cloudimage-responsive/latest/js-cloudimage-responsive.min.js"></script>
     <script>
         window.ciResponsive = new window.CIResponsive({
             {if $ciLazyLoading}
             lazyLoading: true,
-            {/if }
+            {/if}
             {if $ciUseOriginalUrl and $ciCustomLibraryOption eq ''}
             doNotReplaceURL: true,
             {else}
             doNotReplaceURL: false,
             {/if}
-            {if $ciCName neq '' }
+            {if $ciCName neq ''}
             customDomain: true,
             domain: '{$ciCName}',
             {/if}
@@ -52,16 +53,15 @@
             processQueryString: function (props) {$ciCustomJSFunction|escape:'htmlall':'UTF-8'},
             {/if}
             token: '{$ciToken|escape:'htmlall':'UTF-8'}'
-        })
+        });
 
         {if $ciLazyLoading}
         window.lazySizes.init();
         {/if}
     </script>
-    {*Remove this line if unessesary*}
     <style>
-        body#checkout .container {
-            min-height: inherit;
-        }
+    .ci-image-wrapper {
+        padding-bottom: 0 !important;
+    }
     </style>
 {/if}

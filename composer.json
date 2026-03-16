@@ -1,0 +1,18 @@
+{
+    "name": "scaleflex/prestashop-cloudimage",
+    "version": "2.0.0",
+    "description": "Cloudimage by Scaleflex - Resize, compress, optimise and deliver lightning fast images via CDN.",
+    "type": "prestashop-module",
+    "license": "AFL-3.0",
+    "autoload": {
+        "classmap": [
+            "cloudimage.php"
+        ]
+    },
+    "authors": [
+        {
+            "name": "Scaleflex",
+            "email": "plugins@scaleflex.com"
+        }
+    ]
+}
